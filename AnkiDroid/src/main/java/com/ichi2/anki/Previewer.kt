@@ -26,6 +26,7 @@ import android.view.MenuItem
 import android.view.MotionEvent
 import android.view.View
 import android.widget.LinearLayout
+import android.widget.RelativeLayout
 import android.widget.SeekBar
 import android.widget.SeekBar.OnSeekBarChangeListener
 import android.widget.TextView
@@ -34,10 +35,12 @@ import androidx.annotation.VisibleForTesting
 import androidx.appcompat.view.menu.MenuBuilder
 import androidx.core.content.ContextCompat
 import androidx.core.view.MenuItemCompat
+import androidx.vectordrawable.graphics.drawable.VectorDrawableCompat
 import com.google.android.material.snackbar.Snackbar
 import com.ichi2.anki.cardviewer.Gesture
 import com.ichi2.anki.cardviewer.PreviewLayout
 import com.ichi2.anki.cardviewer.ViewerCommand
+import com.ichi2.anki.preferences.sharedPrefs
 import com.ichi2.anki.snackbar.showSnackbar
 import com.ichi2.libanki.Collection
 import com.ichi2.libanki.utils.TimeManager
@@ -69,6 +72,7 @@ class Previewer : AbstractFlashcardViewer() {
     var prefWhiteboard = false
     private var toggleStylus = false
     private var mHasDrawerSwipeConflicts = false
+    private lateinit var mColorPalette: LinearLayout
 
     @get:CheckResult
     @get:VisibleForTesting(otherwise = VisibleForTesting.NONE)
@@ -92,6 +96,7 @@ class Previewer : AbstractFlashcardViewer() {
             finishWithoutAnimation()
             return
         }
+        mColorPalette = findViewById(R.id.whiteboard_editor)
         showBackIcon()
         // Ensure navigation drawer can't be opened. Various actions in the drawer cause crashes.
         disableDrawerSwipe()
@@ -280,6 +285,22 @@ class Previewer : AbstractFlashcardViewer() {
             MetaDB.storeWhiteboardStylusState(this, parentDid, toggleStylus)
             invalidateOptionsMenu()
         }
+        if (item.itemId == R.id.action_change_whiteboard_pen_color) {
+            Timber.i("Reviewer:: Pen Color button pressed")
+            changeWhiteboardPenColor()
+        }
+        if (item.itemId == R.id.action_save_whiteboard) {
+            Timber.i("Reviewer:: Save whiteboard button pressed")
+            if (whiteboard != null) {
+                try {
+                    val savedWhiteboardFileName = whiteboard!!.saveWhiteboard(TimeManager.time).path
+                    showSnackbar(getString(R.string.white_board_image_saved, savedWhiteboardFileName), Snackbar.LENGTH_SHORT)
+                } catch (e: Exception) {
+                    Timber.w(e)
+                    showSnackbar(getString(R.string.white_board_image_save_failed, e.localizedMessage), Snackbar.LENGTH_SHORT)
+                }
+            }
+        }
 
         return super.onOptionsItemSelected(item)
     }
@@ -287,6 +308,36 @@ class Previewer : AbstractFlashcardViewer() {
     public override fun clearWhiteboard() {
         if (whiteboard != null) {
             whiteboard!!.clear()
+        }
+    }
+
+    public override fun changeWhiteboardPenColor() {
+        if (mColorPalette.visibility == View.GONE) {
+            mColorPalette.visibility = View.VISIBLE
+        } else {
+            mColorPalette.visibility = View.GONE
+        }
+        updateWhiteboardEditorPosition()
+    }
+
+    private fun updateWhiteboardEditorPosition() {
+        mAnswerButtonsPosition = this.sharedPrefs()
+            .getString("answerButtonPosition", "bottom")
+        val layoutParams: RelativeLayout.LayoutParams
+        when (mAnswerButtonsPosition) {
+            "none", "top" -> {
+                layoutParams = mColorPalette.layoutParams as RelativeLayout.LayoutParams
+                layoutParams.removeRule(RelativeLayout.ABOVE)
+                layoutParams.addRule(RelativeLayout.ALIGN_PARENT_BOTTOM)
+                mColorPalette.layoutParams = layoutParams
+            }
+
+            "bottom" -> {
+                layoutParams = mColorPalette.layoutParams as RelativeLayout.LayoutParams
+                layoutParams.removeRule(RelativeLayout.ALIGN_PARENT_BOTTOM)
+                layoutParams.addRule(RelativeLayout.ABOVE, R.id.bottom_area_layout)
+                mColorPalette.layoutParams = layoutParams
+            }
         }
     }
 
@@ -315,6 +366,8 @@ class Previewer : AbstractFlashcardViewer() {
         val toggleWhiteboardIcon = menu.findItem(R.id.action_toggle_whiteboard)
         val toggleWhiteboardAlphaIcon = ContextCompat.getDrawable(this, R.drawable.ic_gesture_white)!!.mutate()
         val toggleStylusIcon = menu.findItem(R.id.action_toggle_stylus)
+        val changePenColorIcon = menu.findItem(R.id.action_change_whiteboard_pen_color)
+        val whiteboardColorPaletteIcon = VectorDrawableCompat.create(resources, R.drawable.ic_color_lens_white_24dp, this.theme)!!.mutate()
         if (prefWhiteboard) {
             // Configure the whiteboard related items in the action bar
             toggleWhiteboardIcon.setTitle(R.string.disable_whiteboard)
@@ -327,9 +380,14 @@ class Previewer : AbstractFlashcardViewer() {
             val stylusIcon = ContextCompat.getDrawable(this, R.drawable.ic_gesture_stylus)!!.mutate()
 
             toggleStylusIcon.isVisible = true
+            changePenColorIcon.isVisible = true
             menu.findItem(R.id.action_clear_whiteboard).isVisible = true
+            menu.findItem(R.id.action_save_whiteboard).isVisible = true
 
             whiteboardIcon.alpha = Themes.ALPHA_ICON_ENABLED_LIGHT
+            whiteboardColorPaletteIcon.alpha = Themes.ALPHA_ICON_ENABLED_LIGHT
+            changePenColorIcon.icon = whiteboardColorPaletteIcon
+
             if (toggleStylus) {
                 toggleStylusIcon.setTitle(R.string.disable_stylus)
                 stylusIcon.alpha = Themes.ALPHA_ICON_ENABLED_LIGHT
@@ -342,6 +400,8 @@ class Previewer : AbstractFlashcardViewer() {
             toggleWhiteboardIcon.setTitle(R.string.enable_whiteboard)
             toggleWhiteboardAlphaIcon.alpha = Themes.ALPHA_ICON_DISABLED_LIGHT
             toggleWhiteboardIcon.icon = toggleWhiteboardAlphaIcon
+            whiteboardColorPaletteIcon.alpha = Themes.ALPHA_ICON_DISABLED_LIGHT
+            mColorPalette.visibility = View.GONE
         }
 
         increaseHorizontalPaddingOfOverflowMenuIcons(menu)
@@ -371,6 +431,9 @@ class Previewer : AbstractFlashcardViewer() {
         setWhiteboardEnabledState(prefWhiteboard)
         setWhiteboardVisibility(prefWhiteboard)
         invalidateOptionsMenu()
+        if (!prefWhiteboard) {
+            mColorPalette.visibility = View.GONE
+        }
     }
 
     override fun onSaveInstanceState(outState: Bundle) {

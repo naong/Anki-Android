@@ -24,9 +24,21 @@
         android:visible="false"
         ankidroid:showAsAction="always"/>
     <item
+        android:id="@+id/action_change_whiteboard_pen_color"
+        android:icon="@drawable/ic_color_lens_white_24dp"
+        android:title="@string/title_whiteboard_editor"
+        android:visible="false"
+        ankidroid:showAsAction="never"/>
+    <item
         android:id="@+id/action_toggle_stylus"
         android:title="@string/enable_stylus"
         android:icon="@drawable/ic_gesture_stylus"
+        android:visible="false"
+        ankidroid:showAsAction="never"/>
+    <item
+        android:id="@+id/action_save_whiteboard"
+        android:title="@string/save_whiteboard"
+        android:icon="@drawable/ic_save_white"
         android:visible="false"
         ankidroid:showAsAction="never"/>
     <item
